@@ -14,10 +14,7 @@ root.render(
     <Routes>
       <Route path="/" element={
         <Provider store={mainStore}>
-          <ThemeProvider theme={lightTheme}>
-            <GlobalStyle />
-            <MainApp />
-          </ThemeProvider>
+          <MainApp />
         </Provider>
       } />
       <Route path="/overlay" element={<OverlayWindow />} />

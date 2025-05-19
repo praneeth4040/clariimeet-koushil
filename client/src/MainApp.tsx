@@ -39,7 +39,6 @@ function MainApp() {
         <Sidebar theme={theme} setTheme={setTheme} />
         <Dashboard
           onStartMeeting={() => setMiniTabOpen(true)}
-          onOpenMiniTab={() => setMiniTabOpen(true)}
         />
         {miniTabOpen && (
           <MiniTab

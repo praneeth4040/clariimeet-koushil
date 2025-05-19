@@ -3,31 +3,31 @@ import styled from 'styled-components';
 
 const MiniTabContainer = styled.div`
   position: fixed;
-  right: 32px;
-  bottom: 32px;
+  right: 28px;
+  bottom: 28px;
   z-index: 1100;
   background: ${({ theme }) => theme.card};
   box-shadow: ${({ theme }) => theme.shadow};
-  border-radius: 20px;
-  padding: 18px 16px;
+  border-radius: 14px;
+  padding: 10px 8px;
   display: flex;
   flex-direction: row;
   align-items: center;
-  gap: 18px;
+  gap: 10px;
   opacity: 0.97;
   backdrop-filter: ${({ theme }) => theme.blur};
   cursor: grab;
-  min-width: 220px;
+  min-width: 140px;
 `;
 
 const MiniTabButton = styled.button`
   background: none;
   border: none;
   color: ${({ theme }) => theme.text};
-  font-size: 1.7rem;
-  border-radius: 12px;
-  padding: 12px;
-  margin: 0 2px;
+  font-size: 1.2rem;
+  border-radius: 8px;
+  padding: 6px;
+  margin: 0 1px;
   box-shadow: none;
   transition: background 0.16s, box-shadow 0.16s;
   cursor: pointer;
@@ -41,8 +41,8 @@ const CloseButton = styled.button`
   background: none;
   border: none;
   color: ${({ theme }) => theme.text};
-  font-size: 1.2rem;
-  margin-left: 10px;
+  font-size: 1rem;
+  margin-left: 6px;
   cursor: pointer;
 `;
 

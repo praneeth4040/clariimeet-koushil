@@ -45,10 +45,9 @@ const ActionButton = styled.button`
 
 interface DashboardProps {
   onStartMeeting: () => void;
-  onOpenMiniTab: () => void;
 }
 
-const Dashboard: React.FC<DashboardProps> = ({ onStartMeeting, onOpenMiniTab }) => (
+const Dashboard: React.FC<DashboardProps> = ({ onStartMeeting }) => (
   <DashboardContainer>
     <Title>Clariimeet</Title>
     <Features>
@@ -59,7 +58,6 @@ const Dashboard: React.FC<DashboardProps> = ({ onStartMeeting, onOpenMiniTab }) 
       <li>🌐 Multilingual support</li>
     </Features>
     <ActionButton onClick={onStartMeeting}>Start Meeting</ActionButton>
-    <ActionButton onClick={onOpenMiniTab}>Open MiniTab</ActionButton>
   </DashboardContainer>
 );
 
