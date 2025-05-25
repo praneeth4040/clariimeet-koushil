@@ -36,8 +36,14 @@ app.whenReady().then(() => {
   createMainWindow();
   createOverlayWindow();
 
+  // Listen for IPC messages to show/hide overlay window
   ipcMain.on('show-overlay', () => overlayWindow.show());
   ipcMain.on('hide-overlay', () => overlayWindow.hide());
+
+  // Optional: Hide overlay when main window is closed
+  mainWindow.on('closed', () => {
+    if (overlayWindow) overlayWindow.close();
+  });
 });
 
 app.on('window-all-closed', () => {

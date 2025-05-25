@@ -1,5 +1,6 @@
 import React from 'react';
 import styled from 'styled-components';
+import MiniTab from './components/MiniTab.tsx';
 
 const OverlayContainer = styled.div`
   width: 340px;
@@ -33,14 +34,19 @@ const CloseBtn = styled.button`
 `;
 
 const OverlayWindow: React.FC = () => {
-  const handleClose = () => {
-    window.electron?.ipcRenderer?.send('hide-overlay');
-  };
+  // You can add state here if you want to control overlays from the overlay window
   return (
-    <OverlayContainer>
-      <Title>Clariimeet MiniTab Overlay</Title>
-      <CloseBtn onClick={handleClose} title="Hide Overlay">✖️</CloseBtn>
-    </OverlayContainer>
+    <MiniTab
+      onChat={() => {}}
+      onSummary={() => {}}
+      onNotes={() => {}}
+      onClose={() => {
+        window.electron?.ipcRenderer?.send('hide-overlay');
+      }}
+      showChat={false}
+      showSummary={false}
+      showNotes={false}
+    />
   );
 };
 

@@ -1,3 +1,6 @@
-fastapi
-uvicorn
-pydantic
+soundcard
+soundfile
+numpy
+websockets
+dotenv
+cohere
