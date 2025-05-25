@@ -7,6 +7,12 @@ import numpy as np
 from dotenv import load_dotenv
 import cohere  # pip install cohere
 from transcript_ai import TranscriptAI
+import sys
+import os
+sys.path.append(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from main import broadcast_transcript, broadcast_summary
+
+print(f"[TRANSCRIBE_AUDIO] Script started with args: {sys.argv}")
 
 # Load environment variables from .env file
 load_dotenv()
@@ -19,6 +25,7 @@ CHANNELS = 1
 
 queue = asyncio.Queue(maxsize=10)
 main_loop = None  # Will be set in __main__
+main_server_loop = None
 
 # Shared buffers for mic and speaker
 mic_buffer = None
@@ -83,7 +90,7 @@ async def audio_mixer():
         speaker_buffer = None
 
 async def send_audio(ws):
-    print("🎙️ Streaming mic+speaker audio to Deepgram...")
+    print("Streaming mic+speaker audio to Deepgram...")
     list_audio_devices()  # Print devices for user reference
     mic_device = 11  # Microphone Array (Intel® Smart ...) or your preferred mic
     speaker_device = 1  # Stereo Mix (Realtek(R) Audio)
@@ -108,12 +115,25 @@ async def receive_transcripts(ws):
         msg_json = json.loads(message)
         transcript = msg_json.get("channel", {}).get("alternatives", [{}])[0].get("transcript", "")
         if transcript and transcript != last_transcript:
-            print(f"📝 {transcript}")
+            print(f"Transcript: {transcript}")
             ai.add_transcript(transcript)
             last_transcript = transcript
             # Optionally, auto-summarize every time transcript grows by 500 chars
             if len(ai.full_transcript) % 500 < len(transcript):
-                await ai.summarize()
+                summary = await ai.summarize()
+                if summary and main_server_loop:
+                    asyncio.run_coroutine_threadsafe(
+                        broadcast_summary(summary),
+                        main_server_loop
+                    )
+            # Broadcast to frontend
+            if main_server_loop:
+                asyncio.run_coroutine_threadsafe(
+                    broadcast_transcript(transcript),
+                    main_server_loop
+                )
+            else:
+                await broadcast_transcript(transcript)
 
 async def main():
     headers = {
@@ -129,6 +149,22 @@ async def main():
         await asyncio.gather(send_task, receive_task)
 
 if __name__ == "__main__":
+    import threading
+    from main import run_ws_server
+    if '--ws-mode' in sys.argv:
+        # If started in ws-mode, only run the transcription logic (no server)
+        import asyncio
+        # Instead of getting the event loop here, get it from the parent process if possible
+        # For now, fallback to the current event loop
+        main_server_loop = None  # Do not set to get_event_loop here!
+        main_loop = asyncio.new_event_loop()
+        asyncio.set_event_loop(main_loop)
+        main_loop.run_until_complete(main())
+        asyncio.run(ai.summarize())
+        sys.exit(0)
+    # Start websocket server in a background thread
+    ws_thread = threading.Thread(target=lambda: asyncio.run(run_ws_server()), daemon=True)
+    ws_thread.start()
     main_loop = asyncio.new_event_loop()
     asyncio.set_event_loop(main_loop)
     main_loop.run_until_complete(main())
