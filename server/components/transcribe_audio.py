@@ -55,16 +55,25 @@ def get_loopback_device():
             break
     if wasapi_index is None:
         raise RuntimeError('Windows WASAPI hostapi not found.')
-    # Find the first WASAPI loopback device (for speakers)
+    # Try to find a device with 'loopback' in the name
     devices = sd.query_devices()
     for idx, dev in enumerate(devices):
         if dev['hostapi'] == wasapi_index and dev['max_input_channels'] > 0 and 'loopback' in dev['name'].lower():
             return idx
-    # Fallback: find any device with 'loopback' in the name
+    # Try to find a device with 'stereo mix' in the name
     for idx, dev in enumerate(devices):
-        if 'loopback' in dev['name'].lower():
+        if dev['hostapi'] == wasapi_index and dev['max_input_channels'] > 0 and 'stereo mix' in dev['name'].lower():
             return idx
-    raise RuntimeError('No loopback device found. Please check your audio devices.')
+    # Fallback: prompt user to select from available input devices
+    print("\n[ERROR] No loopback or Stereo Mix device found. Please select an input device manually:")
+    for idx, dev in enumerate(devices):
+        if dev['max_input_channels'] > 0:
+            print(f"{idx}: {dev['name']} (hostapi: {dev['hostapi']})")
+    try:
+        user_idx = int(input("Enter the device index to use for speaker/loopback: "))
+        return user_idx
+    except Exception:
+        raise RuntimeError('No valid device selected for loopback/speaker capture.')
 
 def list_audio_devices():
     print("\nAvailable audio devices:")
@@ -81,6 +90,8 @@ async def audio_mixer():
             await asyncio.sleep(0.005)
         # Mix both sources (simple sum, then normalize)
         mixed = mic_buffer + speaker_buffer
+        # Debug: print max amplitude to check if audio is being captured
+        print(f"[DEBUG] Mixed audio max amplitude: {np.max(np.abs(mixed)):.4f}")
         # Normalize to prevent clipping
         max_val = np.max(np.abs(mixed))
         if max_val > 1.0:
@@ -89,22 +100,45 @@ async def audio_mixer():
         mic_buffer = None
         speaker_buffer = None
 
-async def send_audio(ws):
+async def send_audio(ws, sample_rate):
     print("Streaming mic+speaker audio to Deepgram...")
     list_audio_devices()  # Print devices for user reference
-    mic_device = 11  # Microphone Array (Intel® Smart ...) or your preferred mic
-    speaker_device = 1  # Stereo Mix (Realtek(R) Audio)
+    mic_device = sd.default.device[0]  # Default input device index
+    try:
+        speaker_device = get_loopback_device()  # Dynamically get loopback device
+    except Exception as e:
+        print(f"[ERROR] Could not find loopback device: {e}")
+        return
     print(f"Using mic device index: {mic_device}")
     print(f"Using speaker device index: {speaker_device}")
-    # Increase blocksize to reduce overflow risk
-    with sd.InputStream(callback=mic_callback, channels=CHANNELS, samplerate=SAMPLE_RATE, dtype='float32', device=mic_device, blocksize=2048) as mic_stream, \
-         sd.InputStream(callback=speaker_callback, channels=CHANNELS, samplerate=SAMPLE_RATE, dtype='float32', device=speaker_device, blocksize=2048) as speaker_stream:
-        # Start the audio mixer task
+    print(f"Using sample rate: {sample_rate}")
+    with sd.InputStream(callback=mic_callback, channels=CHANNELS, samplerate=sample_rate, dtype='float32', device=mic_device, blocksize=2048) as mic_stream, \
+         sd.InputStream(callback=speaker_callback, channels=CHANNELS, samplerate=sample_rate, dtype='float32', device=speaker_device, blocksize=2048) as speaker_stream:
         mixer_task = asyncio.create_task(audio_mixer())
         while True:
             data = await queue.get()
             audio_data = (data * 32767).astype(np.int16).tobytes()
             await ws.send(audio_data)
+
+def find_common_samplerate(mic_device, speaker_device, rates=(16000, 44100, 48000)):
+    mic_supported = set()
+    speaker_supported = set()
+    for rate in rates:
+        try:
+            sd.check_input_settings(device=mic_device, samplerate=rate)
+            mic_supported.add(rate)
+        except Exception:
+            pass
+        try:
+            sd.check_input_settings(device=speaker_device, samplerate=rate)
+            speaker_supported.add(rate)
+        except Exception:
+            pass
+    common = mic_supported & speaker_supported
+    if not common:
+        raise RuntimeError(f"No common supported sample rate for mic device {mic_device} and speaker device {speaker_device}. Tried: {rates}")
+    # Prefer higher rates
+    return max(common)
 
 COHERE_API_KEY = os.getenv("COHERE_API_KEY")
 ai = TranscriptAI()
@@ -136,15 +170,24 @@ async def receive_transcripts(ws):
                 await broadcast_transcript(transcript)
 
 async def main():
+    mic_device = sd.default.device[0]
+    try:
+        speaker_device = get_loopback_device()
+    except Exception as e:
+        print(f"[ERROR] Could not find loopback device: {e}")
+        return
+    try:
+        sample_rate = find_common_samplerate(mic_device, speaker_device)
+    except Exception as e:
+        print(f"[ERROR] Could not find a common supported sample rate: {e}")
+        return
     headers = {
         "Authorization": f"Token {DEEPGRAM_API_KEY}",
         "Content-Type": "application/json"
     }
-
-    url = f"{DEEPGRAM_URL}?encoding=linear16&sample_rate={SAMPLE_RATE}&channels={CHANNELS}&punctuate=true&interim_results=true"
-
+    url = f"{DEEPGRAM_URL}?encoding=linear16&sample_rate={sample_rate}&channels={CHANNELS}&punctuate=true&interim_results=true"
     async with websockets.connect(url, extra_headers=headers) as ws:
-        send_task = asyncio.create_task(send_audio(ws))
+        send_task = asyncio.create_task(send_audio(ws, sample_rate))
         receive_task = asyncio.create_task(receive_transcripts(ws))
         await asyncio.gather(send_task, receive_task)
 
